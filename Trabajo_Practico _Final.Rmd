@@ -1,0 +1,358 @@
+---
+title: "Parte 2 - Trabajo Final - Módulo de Machine Learning"
+author: "Silvia Prevettoni"
+date: "2025-12-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE, 
+  warning = FALSE, 
+  message = FALSE,
+  error = FALSE
+)
+```
+
+
+
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(dplyr)
+library(skimr)
+library(GGally)
+library(themis)
+library(DataExplorer)
+library(car)
+```
+
+## Dataset
+
+El estudio se basa en un dataset público que recopila información sobre salud mental y depresión en estudiantes universitarios. Los datos pueden consultarse en: https://www.kaggle.com/datasets/adilshamim8/student-depression-dataset/data
+
+```{r}
+depre_raw<- read.csv("student_depression_dataset.csv")
+```
+
+
+## Análisis Exploratorio
+La dataset cuenta con 27901 registros y 18 variables.
+
+
+```{r}
+glimpse(depre_raw)
+```
+
+- *id*: Identificación única de cada estudiante en la base de datos.
+
+- *Gender*: Género del estudiante.
+
+- *Age*: Edad del estudiante en años.
+
+- *City*: Ciudad o región de residencia del estudiante.
+
+- *Profession*: Profesión u ocupación del estudiante.
+
+- *Work Pressure*: Mide el nivel de presión que experimenta el estudiante en sus responsabilidades laborales (en caso de que trabaje).
+
+- *CGPA*: Es el promedio de calificaciones acumulativas (Cumulative Grade Point Average), que refleja el rendimiento académico general del estudiante.
+
+- *Study Satisfaction*: Indica el nivel de satisfacción del estudiante con sus estudios.
+
+- *Job Satisfaction*: Indica el nivel de satisfacción del estudiante en su área laboral (en caso de que trabaje).
+
+- *Sleep Duration*: Promedio de horas que duerme por día.
+
+- *Dietary Habits*: Hábitos alimenticios del estudiante.
+
+- *Degree*: Nivel de estudio actual o título académico que cursa.
+
+- *Have you ever had suicidal thoughts*: Indica si el estudiante ha tenido pensamientos suicidas alguna vez.
+
+- *Work/study hours*: Cantidad de horas dedicadas al estudio o trabajo.
+
+- *Financial stress*: Mide el nivel de estrés debido a presiones financieras.
+
+- *Family History of Mental Illness*: Indica si hay antecedentes familiares de enfermedades mentales.
+
+- *Depression*: Muestra si el estudiante presenta depresión (0 = No depresivo, 1 = Depresivo). Esta es la variable objetivo (a predecir).
+
+
+
+## Preprocesamiento de datos
+Aquí remuevo las variables que no son relevantes para el análisis y convierto la variable objetivo (Depression) a factor
+
+
+```{r}
+# En la variable profesion - Agrupo las categorias en donde hay solo una profesion bajo la categoria de Other y recodifico los #niveles: 1 = "No depresivo", 2 = "Depresivo"
+depre <- depre_raw %>%
+    mutate(
+    Profession = fct_collapse(Profession,
+      Other = c('Civil Engineer', 'Educational Consultant', 'UX/UI Designer',
+                'Entrepreneur', 'Lawyer', 'Manager', 'Architect',
+                'Chef', 'Doctor', 'Pharmacist', 'Content Writer',
+                'Digital Marketer')
+    ) 
+    )%>% 
+  select(-City) %>% 
+    mutate(
+    Depression = factor(Depression,
+                        levels = c(1, 0),
+                        labels = c("no_depresivo", "depresivo")))
+    
+```
+
+
+Vemos las clases de cada variable.
+
+```{r}
+skim(depre)
+```
+
+La cantidad de casos "Sí" y "No" está un poco desbalanceada.
+
+```{r}
+depre %>%
+  count(Depression)
+```
+
+### Número de valores ausentes
+
+```{r}
+# Número de datos ausentes por variable
+depre %>% map_dbl(.f = function(x){sum(is.na(x))})
+```
+### Variables continuas
+
+```{r}
+plot_density(
+  data    = depre %>% select(where(is.numeric)),
+  ncol    = 3,
+  title   = "Distribucion variables continuas",
+  ggtheme = theme_bw(),
+  theme_config = list(
+    plot.title = element_text(size = 16, face = "bold"),
+    strip.text = element_text(colour = "black", size = 12, face = 2)
+  )
+)
+```
+
+
+## Correlación variables continuas
+Se analiza la matriz de correlación para identificar variables altamente correlacionadas (multicolinealidad).
+
+
+
+
+```{r}
+plot_correlation(
+  data = depre,
+  type = "continuous",
+  title = "Matriz de correlacion variables continuas",
+  theme_config = list(legend.position = "none",
+                      plot.title = element_text(size = 16, face = "bold"),
+                      axis.title = element_blank(),
+                      axis.text.x = element_text(angle = -45, hjust = +0.1)
+                     )
+)
+```
+
+
+La matriz de correlación muestra una asociación lineal fuerte entre Job Satisfaction y Work Pressure (r = 0.77). Para evaluar si esta correlación induce multicolinealidad problemática en el modelo de regresión logística, procedo a calcular los Factores de Inflación de Varianza (VIF).
+
+```{r}
+
+modelo_completo <- glm(Depression ~ ., data = depre, family = binomial)
+vif(modelo_completo)
+```
+
+Todos los valores se encuentran por debajo de 1.5, por lo tanto no hay problema de multicolinealidad.
+
+### Variables cualitativas 
+  
+```{r}
+plot_bar(
+  data = depre %>% select(-Degree, - Profession),
+  ncol = 3,
+  title = "Numero de observaciones por grupo",
+  ggtheme = theme_bw(),
+  theme_config = list(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    strip.text = element_text(colour = "black", size = 10, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 9),  # Rotar etiquetas
+    axis.text.y = element_text(angle = 45, size = 9),
+    legend.position = "none"
+  )
+)
+```
+
+
+
+También observamos variables con muchas categorías, como es el caso de Profession y Degree.
+
+```{r}
+table(depre$Profession)
+
+```
+```{r}
+table(depre$Degree)
+
+```
+
+
+
+
+    
+
+## Modelado
+
+### Divido los datos
+
+```{r}
+#seteo la semilla
+set.seed(123)
+
+#divido los datos
+depre_split <- initial_split(depre, strata = Depression) 
+depre_train <- training(depre_split)
+depre_test <- testing(depre_split)
+```
+
+
+Utilizo validación cruzada para estimar la capacidad de generalización del modelo y optimizar sus hiperparámetros.
+```{r}
+#folds de validación cruzada
+set.seed(123)
+depre_folds <- vfold_cv(depre_train, strata = Depression)
+depre_folds
+```
+
+
+```{r}
+depre_train %>%
+  count(Depression)
+```
+
+```{r}
+depre_test %>%
+  count(Depression)
+```
+
+
+## Receta
+Preprocesamos los datos para el modelo de Machine Learning.
+
+
+```{r}
+logistic_recipe <-
+  recipe(formula = Depression ~ ., data = depre_train) %>%
+  update_role(id, new_role = "id") %>%
+  step_unknown(all_nominal_predictors()) %>%
+  step_downsample(Depression)%>%
+  step_other(Profession, threshold = 0.01, other = "Other")
+```
+
+## Modelo
+
+El algoritmo a utilizar es el de regresión logística binomial, que clasifica la variable dependiente en dos categorías: Depresivo y No depresivo.
+
+
+```{r}
+logistic_spec <- logistic_reg() %>%
+  set_mode("classification") 
+```
+
+## Workflow
+  
+```{r}
+log_workflow <- workflow() %>%
+  add_recipe(logistic_recipe) %>%
+  add_model(logistic_spec)
+```
+  
+  
+## Entrenamiento del algoritmo
+
+```{r}
+doParallel::registerDoParallel()
+set.seed(123)
+logistic_rs <-
+  fit_resamples(log_workflow,
+    resamples = depre_folds,
+    control = control_resamples(save_pred = TRUE)
+  )
+```
+
+
+## Perfomance
+
+Vemos la perfomance del modelo en Train.
+
+```{r}
+logistic_rs %>%
+  collect_metrics()
+```
+
+
+```{r}
+predicciones <- collect_predictions(logistic_rs)
+
+```
+
+
+```{r}
+collect_predictions(logistic_rs) %>%
+  group_by(id) %>%
+  roc_curve(Depression, .pred_no_depresivo) %>%
+  autoplot()
+```
+
+## Predicción
+Elijo el mejor modelo para poder predecir en el set de datos de Test.
+
+```{r}
+final_fitted <- last_fit(log_workflow, depre_split)
+final_fitted 
+```
+
+## Métricas
+
+```{r}
+final_fitted %>%
+  collect_metrics()
+```
+
+En el conjunto de entrenamiento, el modelo alcanzó una precisión (accuracy) del 84% y un AUC-ROC (Área Bajo la Curva ROC) de 0.92.
+
+
+## Predicciones del modelo
+
+```{r}
+final_fitted %>%
+  collect_predictions()
+```
+
+
+## Matriz de confusión
+
+
+```{r}
+final_fitted %>%
+  collect_predictions() %>%
+  conf_mat(Depression, .pred_class) 
+```
+En la matriz de confusión, la diagonal principal contiene las clasificaciones correctas: verdaderos positivos (VP) y verdaderos negativos (VN), mientras que la diagonal secundaria muestra los errores: falsos positivos (FP) y falsos negativos (FN).
+
+
+
+
+
+
+
+
+
+
+
+
+
