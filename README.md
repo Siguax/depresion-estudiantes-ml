@@ -123,12 +123,12 @@ install.packages(c(
 
 ## 📁 Estructura del repositorio
 
-```text
+```
 depresion-estudiantes-ml/
 ├── README.md
-├── Trabajo_Practico_Final.Rmd          # Código fuente R Markdown
-├── index.html                          # Documento renderizado (GitHub Pages)
-├── student_depression_dataset.csv      # Dataset (o enlace a Kaggle)
+├── index.html          ← acá, en la raíz
+├── Trabajo_Practico_Final.Rmd
+├── student_depression_dataset.csv
 ├── LICENSE
 └── .gitignore
 ```
