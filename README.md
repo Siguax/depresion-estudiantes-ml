@@ -153,7 +153,7 @@ depresion-estudiantes-ml/
 - R Core Team (2024). *R: A Language and Environment for Statistical Computing*.
 
 ## 📄 Licencia
-Distribuido bajo la licencia MIT. Consultá LICENSE para más detalles.
+Distribuido bajo la licencia **MIT**. Consultá [`LICENSE`](LICENSE) para más detalles.
 
 ## ✉️ Contacto
 **Silvia Prevettoni**
